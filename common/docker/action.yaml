@@ -1,0 +1,44 @@
+name: BuildImage
+author: EleSangwon
+description: 'Build and push docker image to ECR'
+inputs:
+  repository:
+    required: true
+    default: 'example-repository'
+  registry:
+    required: true
+    default: 'example-registry'
+  dockerfile:
+    required: true
+    default: Dockerfile
+  file-changes:
+    description: 'file pattern list for checking rebuilding image or not'
+    required: false
+    default: ''
+runs:
+  using: "composite"
+  steps:
+  - name: Get specific changed files
+    id: changed-files
+    uses: tj-actions/changed-files@v13.1
+    with:
+      files: |
+        ${{ inputs.file-changes }}
+  - name: Login to Amazon ECR
+    id: login-ecr
+    uses: aws-actions/amazon-ecr-login@v1
+  - name: no source files changes - add current tag to latest image
+    if: ${{ steps.changed-files.outputs.any_changed == 'false' }}
+    shell: bash
+    run: |
+       docker pull ${{ inputs.registry }}/${{ inputs.repository }}:latest
+       docker tag ${{ inputs.registry }}/${{ inputs.repository }}:latest ${{ inputs.registry }}/${{ inputs.repository }}:${{ github.sha }}
+       docker push ${{ inputs.registry }}/${{ inputs.repository }}:${{ github.sha }}
+  - name: source files changes - build new image
+    if: ${{ steps.changed-files.outputs.any_changed == 'true' }}
+    shell: bash
+    run: |
+      docker build -f ${GITHUB_WORKSPACE}/${{ inputs.dockerfile }} . \
+      --tag ${{ inputs.registry }}/${{ inputs.repository }}:latest \
+      --tag ${{ inputs.registry }}/${{ inputs.repository }}:${{ github.sha }}
+      docker push ${{ inputs.registry }}/${{ inputs.repository }}:latest
